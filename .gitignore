@@ -1,0 +1,63 @@
+# Rust-specific ignores
+/target/
+**/target/
+/debug/
+/release/
+*.rs.bk
+
+# Contract-specific ignores (covers all contracts)
+contracts/*/target/
+contracts/*/Cargo.lock
+contracts/*/*.contract
+contracts/*/*.wasm
+contracts/*/*.json
+
+# Local dev tooling binaries (ink-node, etc.)
+.tooling/
+
+# macOS-specific ignores
+.DS_Store
+.AppleDouble
+.LSOverride
+Icon
+
+# Documentation and IDE-related ignores
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# General build artifacts
+*.o
+*.a
+*.so
+*.dylib
+
+# Test and cache files
+*.log
+*.cache
+
+# Temporary files
+**/.*~
+**/*~
+
+# Next.js specific ignores
+frontend/.next/
+frontend/out/
+frontend/build/
+frontend/dist/
+frontend/node_modules/
+frontend/.env.local
+frontend/.env.development.local
+frontend/.env.test.local
+frontend/.env.production.local
+frontend/npm-debug.log*
+frontend/yarn-debug.log*
+frontend/yarn-error.log*
+frontend/.pnpm-debug.log*
+frontend/next-env.d.ts
+frontend/*.tsbuildinfo
+frontend/.vercel
+frontend/.swc/
+frontend/next-swc.*.node
