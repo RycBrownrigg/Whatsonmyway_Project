@@ -1,0 +1,24 @@
+services:
+  wowm-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: wowm
+      POSTGRES_PASSWORD: wowm
+      POSTGRES_DB: wowm
+    ports:
+      - "127.0.0.1:5432:5432"
+    volumes:
+      - wowm_db_data:/var/lib/postgresql/data
+
+  wowm-api:
+    build: ../api
+    env_file: ../api/.env
+    environment:
+      DATABASE_URL: postgres://wowm:wowm@wowm-db:5432/wowm
+    ports:
+      - "127.0.0.1:3003:3003"
+    depends_on:
+      - wowm-db
+
+volumes:
+  wowm_db_data:
