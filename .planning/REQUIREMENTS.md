@@ -98,17 +98,50 @@ None currently deferred — the whole spec is in scope for this project (see Key
 
 ## Traceability
 
-Populated during roadmap creation.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (pending roadmap) | — | Pending |
+| ADMINFW-01 | Phase 1 | Pending |
+| ADMINFW-02 | Phase 1 | Pending |
+| ADMINPOI-01 | Phase 1 | Pending |
+| ADMINPOI-02 | Phase 1 | Pending |
+| ADMINBUILD-01 | Phase 1 | Pending |
+| ROUTE-01 | Phase 2 | Pending |
+| ROUTE-02 | Phase 2 | Pending |
+| ROUTE-03 | Phase 2 | Pending |
+| ROUTE-04 | Phase 2 | Pending |
+| ROUTE-05 | Phase 2 | Pending |
+| POI-01 | Phase 2 | Pending |
+| POI-02 | Phase 2 | Pending |
+| PURCH-01 | Phase 3 | Pending |
+| PURCH-02 | Phase 3 | Pending |
+| PURCH-03 | Phase 3 | Pending |
+| PURCH-04 | Phase 3 | Pending |
+| PURCH-05 | Phase 3 | Pending |
+| FILTER-01 | Phase 4 | Pending |
+| PACK-01 | Phase 4 | Pending |
+| PACK-02 | Phase 4 | Pending |
+| PACK-03 | Phase 4 | Pending |
+| STATE-01 | Phase 4 | Pending |
+| ADMINBUILD-02 | Phase 4 | Pending |
+| UPDATE-01 | Phase 5 | Pending |
+| UPDATE-02 | Phase 5 | Pending |
+| UPDATE-03 | Phase 5 | Pending |
+| UPDATE-04 | Phase 5 | Pending |
+| UPDATE-05 | Phase 5 | Pending |
+| ADMINIMPORT-01 | Phase 6 | Pending |
+| ADMINIMPORT-02 | Phase 6 | Pending |
+| ADMINIMPORT-03 | Phase 6 | Pending |
+| ADMINIMPORT-04 | Phase 6 | Pending |
+| ADMINIMPORT-05 | Phase 6 | Pending |
+| ADMINIMPORT-06 | Phase 6 | Pending |
+| FEEDBACK-01 | Phase 6 | Pending |
+| ADMINTRIAGE-01 | Phase 6 | Pending |
 
 **Coverage:**
 - v1 requirements: 36 total
-- Mapped to phases: 0 (pending roadmap)
-- Unmapped: 36 ⚠️ (expected until roadmap is created)
+- Mapped to phases: 36/36
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-09-20*
-*Last updated: 2026-09-20 after initial definition*
+*Last updated: 2026-09-20 after roadmap creation*
