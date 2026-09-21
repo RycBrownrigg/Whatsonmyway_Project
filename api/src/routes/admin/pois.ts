@@ -9,7 +9,7 @@ import {
   poiTypes,
   pois,
 } from '../../db/schema.js';
-import { geocodeAddress } from '../../services/geocoding.js';
+import { geocodeAddress, normalizeAddressKey, type GeocodeCandidate } from '../../services/geocoding.js';
 import { AppError } from '../../utils/errors.js';
 
 export const CreatePoiSchema = z.object({
@@ -26,10 +26,50 @@ export const CreatePoiSchema = z.object({
   filterValues: z.record(z.string(), z.unknown()).default({}),
 });
 
+// Every CreatePoiSchema field is optional here except poiTypeId, which is
+// omitted entirely — moving a POI between types would silently change which
+// pack builds include it (see this plan's <action> for PUT /:id).
+export const UpdatePoiSchema = z.object({
+  name: z.string().min(1).optional(),
+  addressStreet: z.string().min(1).optional(),
+  addressCity: z.string().min(1).optional(),
+  addressState: z.string().length(2).optional(),
+  addressZip: z.string().min(1).optional(),
+  phone: z.string().optional(),
+  website: z.string().url().optional(),
+  additionalInfo: z.string().optional(),
+  customFields: z.record(z.string(), z.unknown()).optional(),
+  filterValues: z.record(z.string(), z.unknown()).optional(),
+});
+
+// An absent body means "re-run the provider" (explicit retry). A present
+// body selects a stored candidate by index instead of calling the provider.
+export const GeocodeActionSchema = z
+  .object({
+    selectedCandidateIndex: z.number().int().nonnegative(),
+  })
+  .optional();
+
 const PoiListQuerySchema = z.object({
   poiTypeId: z.string().uuid().optional(),
   status: z.enum(['active', 'flagged', 'archived']).optional(),
 });
+
+type PoiAddress = {
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressZip: string;
+};
+
+function addressKeyFromRow(row: PoiAddress): string {
+  return normalizeAddressKey({
+    street: row.addressStreet,
+    city: row.addressCity,
+    state: row.addressState,
+    zip: row.addressZip,
+  });
+}
 
 // T-01-14 (threat model): customFields/filterValues object keys are bounded
 // upstream by the fieldKey/filterKey regex (plan 01-02), but this route goes
@@ -143,5 +183,213 @@ export async function registerPoiRoutes(fastify: FastifyInstance) {
       .orderBy(asc(pois.name));
 
     reply.status(200).send(rows);
+  });
+
+  // Not explicitly named in this plan's <action> mount list, but required by
+  // it: the edit screen loads a single POI through `poiApi.get(id)`, and
+  // there is no other way to fetch one row by id (Rule 2 — missing critical
+  // functionality the edit form cannot work without).
+  fastify.get<{ Params: { id: string } }>('/v1/admin/pois/:id', async (req, reply) => {
+    const { id } = req.params;
+    const [poi] = await db.select().from(pois).where(eq(pois.id, id));
+    if (!poi) {
+      reply.status(404).send({ error: 'POI_NOT_FOUND' });
+      return;
+    }
+    reply.status(200).send(poi);
+  });
+
+  fastify.put<{ Params: { id: string } }>('/v1/admin/pois/:id', async (req, reply) => {
+    const { id } = req.params;
+    const parsed = UpdatePoiSchema.safeParse(req.body);
+    if (!parsed.success) {
+      reply.status(400).send({ error: 'VALIDATION_FAILED', issues: parsed.error.flatten() });
+      return;
+    }
+
+    const [existing] = await db.select().from(pois).where(eq(pois.id, id));
+    if (!existing) {
+      reply.status(404).send({ error: 'POI_NOT_FOUND' });
+      return;
+    }
+
+    const patch = parsed.data;
+
+    // Same defense-in-depth as the create path (T-01-14): a submitted
+    // customFields/filterValues key must match a saved field/filter
+    // definition for a pack built on this POI's type.
+    if (patch.customFields || patch.filterValues) {
+      const { fieldKeys, filterKeys } = await findAllowedKeys(existing.poiTypeId);
+      const unknownFieldKeys = Object.keys(patch.customFields ?? {}).filter((k) => !fieldKeys.has(k));
+      const unknownFilterKeys = Object.keys(patch.filterValues ?? {}).filter((k) => !filterKeys.has(k));
+      if (unknownFieldKeys.length > 0 || unknownFilterKeys.length > 0) {
+        reply.status(400).send({
+          error: 'UNKNOWN_FIELD_OR_FILTER_KEY',
+          unknownFieldKeys,
+          unknownFilterKeys,
+        });
+        return;
+      }
+    }
+
+    const mergedAddress: PoiAddress = {
+      addressStreet: patch.addressStreet ?? existing.addressStreet,
+      addressCity: patch.addressCity ?? existing.addressCity,
+      addressState: patch.addressState ?? existing.addressState,
+      addressZip: patch.addressZip ?? existing.addressZip,
+    };
+
+    const nonGeocodeUpdates: Record<string, unknown> = {};
+    if (patch.name !== undefined) nonGeocodeUpdates.name = patch.name;
+    if (patch.phone !== undefined) nonGeocodeUpdates.phone = patch.phone;
+    if (patch.website !== undefined) nonGeocodeUpdates.website = patch.website;
+    if (patch.additionalInfo !== undefined) nonGeocodeUpdates.additionalInfo = patch.additionalInfo;
+    if (patch.customFields !== undefined) nonGeocodeUpdates.customFields = patch.customFields;
+    if (patch.filterValues !== undefined) nonGeocodeUpdates.filterValues = patch.filterValues;
+
+    const addressUnchanged = addressKeyFromRow(mergedAddress) === addressKeyFromRow(existing);
+
+    if (addressUnchanged) {
+      // §17: "re-imports or minor data refreshes don't re-bill" — skip the
+      // provider entirely and carry every geocode column and `status`
+      // through unchanged, so an unrelated edit (name/phone/website/custom
+      // fields) can never quietly un-flag a POI.
+      const [updated] = await db
+        .update(pois)
+        .set({ ...nonGeocodeUpdates, ...mergedAddress, updatedAt: new Date() })
+        .where(eq(pois.id, id))
+        .returning();
+
+      reply.status(200).send({ ...updated, geocodeErrorCode: null });
+      return;
+    }
+
+    let geocodeResult;
+    try {
+      geocodeResult = await geocodeAddress({
+        street: mergedAddress.addressStreet,
+        city: mergedAddress.addressCity,
+        state: mergedAddress.addressState,
+        zip: mergedAddress.addressZip,
+      });
+    } catch (err) {
+      if (err instanceof AppError) {
+        reply.status(err.statusCode).send({ error: err.code, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const [updated] = await db
+      .update(pois)
+      .set({
+        ...nonGeocodeUpdates,
+        ...mergedAddress,
+        latitude: geocodeResult.latitude,
+        longitude: geocodeResult.longitude,
+        geocodeStatus: geocodeResult.status,
+        geocodeConfidence: geocodeResult.confidence,
+        geocodeCandidates: geocodeResult.candidates,
+        status: geocodeResult.status === 'ok' ? 'active' : 'flagged',
+        updatedAt: new Date(),
+      })
+      .where(eq(pois.id, id))
+      .returning();
+
+    reply.status(200).send({ ...updated, geocodeErrorCode: geocodeResult.errorCode });
+  });
+
+  fastify.post<{ Params: { id: string } }>('/v1/admin/pois/:id/geocode', async (req, reply) => {
+    const { id } = req.params;
+
+    const [existing] = await db.select().from(pois).where(eq(pois.id, id));
+    if (!existing) {
+      reply.status(404).send({ error: 'POI_NOT_FOUND' });
+      return;
+    }
+
+    const parsedBody = GeocodeActionSchema.safeParse(req.body ?? undefined);
+    if (!parsedBody.success) {
+      reply.status(400).send({ error: 'VALIDATION_FAILED', issues: parsedBody.error.flatten() });
+      return;
+    }
+
+    if (parsedBody.data) {
+      const { selectedCandidateIndex } = parsedBody.data;
+      const storedCandidates = (existing.geocodeCandidates as GeocodeCandidate[] | null) ?? null;
+      if (!storedCandidates || storedCandidates.length === 0) {
+        reply.status(409).send({ error: 'NO_CANDIDATES_STORED' });
+        return;
+      }
+      const candidate = storedCandidates[selectedCandidateIndex];
+      if (!candidate) {
+        reply.status(400).send({ error: 'CANDIDATE_INDEX_OUT_OF_RANGE' });
+        return;
+      }
+
+      const latitude = Number(candidate.latitude);
+      const longitude = Number(candidate.longitude);
+      if (!Number.isFinite(latitude) || !Number.isFinite(longitude)) {
+        reply.status(400).send({ error: 'CANDIDATE_INDEX_OUT_OF_RANGE' });
+        return;
+      }
+
+      // A human confirmed this candidate — no further provider call, and no
+      // ambiguity remains once one is chosen.
+      const [updated] = await db
+        .update(pois)
+        .set({
+          latitude,
+          longitude,
+          geocodeStatus: 'ok',
+          geocodeConfidence: 1.0,
+          geocodeCandidates: null,
+          status: 'active',
+          updatedAt: new Date(),
+        })
+        .where(eq(pois.id, id))
+        .returning();
+
+      reply.status(200).send({ ...updated, geocodeErrorCode: null });
+      return;
+    }
+
+    // No body: an explicit admin retry always reaches the provider, even
+    // when the address is unchanged — the memo inside geocodeAddress is
+    // bypassed for exactly this reason (see geocoding.ts).
+    let geocodeResult;
+    try {
+      geocodeResult = await geocodeAddress(
+        {
+          street: existing.addressStreet,
+          city: existing.addressCity,
+          state: existing.addressState,
+          zip: existing.addressZip,
+        },
+        { bypassMemo: true },
+      );
+    } catch (err) {
+      if (err instanceof AppError) {
+        reply.status(err.statusCode).send({ error: err.code, message: err.message });
+        return;
+      }
+      throw err;
+    }
+
+    const [updated] = await db
+      .update(pois)
+      .set({
+        latitude: geocodeResult.latitude,
+        longitude: geocodeResult.longitude,
+        geocodeStatus: geocodeResult.status,
+        geocodeConfidence: geocodeResult.confidence,
+        geocodeCandidates: geocodeResult.candidates,
+        status: geocodeResult.status === 'ok' ? 'active' : 'flagged',
+        updatedAt: new Date(),
+      })
+      .where(eq(pois.id, id))
+      .returning();
+
+    reply.status(200).send({ ...updated, geocodeErrorCode: geocodeResult.errorCode });
   });
 }

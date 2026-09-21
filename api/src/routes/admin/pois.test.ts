@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { eq } from 'drizzle-orm';
 import { ADMIN_TOKEN_FOR_TESTS, buildTestApp, resetDb, testDb } from '../../../test/setup.js';
 import { pois } from '../../db/schema.js';
+import { clearGeocodeMemo } from '../../services/geocoding.js';
 
 function authHeaders() {
   return { authorization: `Bearer ${ADMIN_TOKEN_FOR_TESTS}` };
@@ -40,7 +41,7 @@ function fakeResponse(body: unknown): Response {
 }
 
 function mockSmarty(candidates: unknown[]) {
-  vi.spyOn(globalThis, 'fetch').mockResolvedValue(fakeResponse(candidates));
+  return vi.spyOn(globalThis, 'fetch').mockResolvedValue(fakeResponse(candidates));
 }
 
 function validPoiPayload(poiTypeId: string, overrides: Record<string, unknown> = {}) {
@@ -55,9 +56,24 @@ function validPoiPayload(poiTypeId: string, overrides: Record<string, unknown> =
   };
 }
 
+async function createPoi(
+  app: ReturnType<typeof buildTestApp>,
+  poiTypeId: string,
+  overrides: Record<string, unknown> = {},
+) {
+  const response = await app.inject({
+    method: 'POST',
+    url: '/v1/admin/pois',
+    headers: authHeaders(),
+    payload: validPoiPayload(poiTypeId, overrides),
+  });
+  return response.json();
+}
+
 describe('admin pois (ADMINPOI-01)', () => {
   beforeEach(async () => {
     await resetDb();
+    clearGeocodeMemo();
     vi.stubEnv('SMARTY_AUTH_ID', 'test-auth-id');
     vi.stubEnv('SMARTY_AUTH_TOKEN', 'test-auth-token');
     vi.stubEnv('GEOCODE_CONFIDENCE_THRESHOLD', '0.7');
@@ -254,5 +270,184 @@ describe('admin pois (ADMINPOI-01)', () => {
 
     const poisResponse = await app.inject({ method: 'GET', url: '/v1/admin/pois' });
     expect(poisResponse.statusCode).toBe(401);
+  });
+});
+
+describe('admin pois review/correction loop (ADMINPOI-02)', () => {
+  beforeEach(async () => {
+    await resetDb();
+    clearGeocodeMemo();
+    vi.stubEnv('SMARTY_AUTH_ID', 'test-auth-id');
+    vi.stubEnv('SMARTY_AUTH_TOKEN', 'test-auth-token');
+    vi.stubEnv('GEOCODE_CONFIDENCE_THRESHOLD', '0.7');
+  });
+
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.restoreAllMocks();
+  });
+
+  it('PUT with a changed address issues exactly one provider call and rewrites the geocode columns', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+
+    const fetchSpy = mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    fetchSpy.mockClear();
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/pois/${created.id}`,
+      headers: authHeaders(),
+      payload: { addressStreet: '456 Oak Ave' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+    const body = response.json();
+    expect(body.geocodeStatus).toBe('ok');
+    expect(body.status).toBe('active');
+    expect(typeof body.latitude).toBe('number');
+    expect(typeof body.longitude).toBe('number');
+  });
+
+  it('PUT with the four address fields unchanged issues zero provider calls and leaves geocode columns unchanged, even when unrelated fields change', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+    expect(created.geocodeStatus).toBe('failed');
+    expect(created.status).toBe('flagged');
+
+    const fetchSpy = mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    fetchSpy.mockClear();
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/pois/${created.id}`,
+      headers: authHeaders(),
+      payload: {
+        name: 'Renamed Diner',
+        phone: '555-1234',
+        website: 'https://example.com',
+        additionalInfo: 'Updated note',
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+    const body = response.json();
+    expect(body.name).toBe('Renamed Diner');
+    expect(body.geocodeStatus).toBe('failed');
+    expect(body.status).toBe('flagged');
+    expect(body.latitude).toBeNull();
+    expect(body.longitude).toBeNull();
+  });
+
+  it('PUT changing only name on a flagged POI leaves status as flagged when read back through testDb', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/pois/${created.id}`,
+      headers: authHeaders(),
+      payload: { name: 'Only Name Changed' },
+    });
+
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.status).toBe('flagged');
+  });
+
+  it('PUT with a corrected address sets geocode_status ok and status active', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+
+    mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/pois/${created.id}`,
+      headers: authHeaders(),
+      payload: { addressStreet: '789 Corrected St' },
+    });
+
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.geocodeStatus).toBe('ok');
+    expect(row.status).toBe('active');
+  });
+
+  it('PUT with a changed address that still fails leaves geocode_status failed and status flagged', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+
+    mockSmarty([]);
+    const response = await app.inject({
+      method: 'PUT',
+      url: `/v1/admin/pois/${created.id}`,
+      headers: authHeaders(),
+      payload: { addressStreet: '999 Still Wrong St' },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.geocodeStatus).toBe('failed');
+    expect(row.status).toBe('flagged');
+  });
+
+  it('POST /geocode with no body calls the stub exactly once even when the address is unchanged', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([]);
+    const created = await createPoi(app, poiType.id);
+
+    const fetchSpy = mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    fetchSpy.mockClear();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('POST /geocode on a POI that now resolves sets geocode_status ok, status active, and clears geocode_candidates', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([smartyCandidate({}), smartyCandidate({ latitude: 40.1, longitude: -90.1 })]);
+    const created = await createPoi(app, poiType.id);
+    expect(created.geocodeStatus).toBe('low_confidence');
+
+    mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.geocodeStatus).toBe('ok');
+    expect(body.status).toBe('active');
+    expect(body.geocodeCandidates).toBeNull();
+  });
+
+  it('POST /geocode for an unknown POI id returns 404 POI_NOT_FOUND', async () => {
+    const app = buildTestApp();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/v1/admin/pois/00000000-0000-0000-0000-000000000000/geocode',
+      headers: authHeaders(),
+    });
+
+    expect(response.statusCode).toBe(404);
+    expect(response.json().error).toBe('POI_NOT_FOUND');
   });
 });

@@ -10,6 +10,22 @@ const SMARTY_US_STREET_HOST = 'https://us-street.api.smarty.com/street-address';
 const RETRY_DELAYS_MS = [250, 1000];
 const REQUEST_TIMEOUT_MS = 5000;
 
+// Short-lived in-process memo: collapses duplicate provider calls for the
+// same address within one admin session (for example a PUT save immediately
+// followed by a page reload that re-derives the same normalizeAddressKey).
+// This is deliberately NOT the §17 "don't re-bill on unchanged address"
+// control — that's enforced at the route layer by comparing address keys
+// and skipping geocodeAddress entirely. This memo is a smaller, separate
+// safety net inside the same process for calls that do reach this function.
+const GEOCODE_MEMO_TTL_MS = 15 * 60 * 1000;
+const geocodeMemo = new Map<string, { result: GeocodeResult; storedAt: number }>();
+
+// Exported for tests: clears the memo so one test's cached result cannot
+// make a later test pass vacuously (a fresh geocodeMemo per beforeEach).
+export function clearGeocodeMemo(): void {
+  geocodeMemo.clear();
+}
+
 export interface AddressInput {
   street: string;
   city: string;
@@ -170,7 +186,36 @@ async function requestSmarty(
 // more times (250ms then 1000ms backoff) on a non-2xx response, an aborted
 // request, or a malformed payload. §15: "surface to the admin only once
 // retries are exhausted" — this loop is where that is honoured.
-export async function geocodeAddress(input: AddressInput): Promise<GeocodeResult> {
+//
+// `bypassMemo` is consulted before this ever reaches the provider: an
+// explicit admin "Retry Geocode" action must always reach Smarty, even when
+// the address is unchanged and a fresh memo entry exists for it — otherwise
+// the memo would silently satisfy the admin's explicit retry from cache,
+// contradicting the very behavior this plan requires ("POST /geocode with no
+// body always issues a provider call, even when the address is unchanged").
+// A provider error is deliberately never memoized: it's a transient failure
+// of the call, not a stable fact about the address, so it must not block a
+// legitimate retry attempt within the memo's 15-minute window.
+export async function geocodeAddress(
+  input: AddressInput,
+  options: { bypassMemo?: boolean } = {},
+): Promise<GeocodeResult> {
+  const memoKey = normalizeAddressKey(input);
+  if (!options.bypassMemo) {
+    const cached = geocodeMemo.get(memoKey);
+    if (cached && Date.now() - cached.storedAt < GEOCODE_MEMO_TTL_MS) {
+      return cached.result;
+    }
+  }
+
+  const result = await performGeocode(input);
+  if (result.errorCode !== 'PROVIDER_ERROR') {
+    geocodeMemo.set(memoKey, { result, storedAt: Date.now() });
+  }
+  return result;
+}
+
+async function performGeocode(input: AddressInput): Promise<GeocodeResult> {
   const authId = process.env.SMARTY_AUTH_ID;
   const authToken = process.env.SMARTY_AUTH_TOKEN;
   if (!authId) {

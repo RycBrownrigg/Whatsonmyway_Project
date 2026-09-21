@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { geocodeAddress, normalizeAddressKey } from './geocoding.js';
+import { clearGeocodeMemo, geocodeAddress, normalizeAddressKey } from './geocoding.js';
 
 const ADDRESS = { street: '123 Main St', city: 'Springfield', state: 'IL', zip: '62701' };
 
@@ -32,6 +32,7 @@ function candidate(overrides: {
 
 describe('geocoding service (§15/§17)', () => {
   beforeEach(() => {
+    clearGeocodeMemo();
     vi.stubEnv('SMARTY_AUTH_ID', 'test-auth-id');
     vi.stubEnv('SMARTY_AUTH_TOKEN', 'test-auth-token');
     vi.stubEnv('GEOCODE_CONFIDENCE_THRESHOLD', '0.7');

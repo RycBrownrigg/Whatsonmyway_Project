@@ -147,6 +147,19 @@ export interface CreatePoiResponse extends Poi {
   geocodeErrorCode: string | null;
 }
 
+export interface UpdatePoiInput {
+  name?: string;
+  addressStreet?: string;
+  addressCity?: string;
+  addressState?: string;
+  addressZip?: string;
+  phone?: string;
+  website?: string;
+  additionalInfo?: string;
+  customFields?: Record<string, unknown>;
+  filterValues?: Record<string, unknown>;
+}
+
 export interface CreateFieldInput {
   fieldKey: string;
   label: string;
@@ -255,5 +268,20 @@ export const poiApi = {
     apiCall<CreatePoiResponse>('/v1/admin/pois', {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+  get: (id: string) => apiCall<Poi>(`/v1/admin/pois/${id}`),
+  update: (id: string, input: UpdatePoiInput) =>
+    apiCall<CreatePoiResponse>(`/v1/admin/pois/${id}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  retryGeocode: (id: string) =>
+    apiCall<CreatePoiResponse>(`/v1/admin/pois/${id}/geocode`, {
+      method: 'POST',
+    }),
+  selectCandidate: (id: string, index: number) =>
+    apiCall<CreatePoiResponse>(`/v1/admin/pois/${id}/geocode`, {
+      method: 'POST',
+      body: JSON.stringify({ selectedCandidateIndex: index }),
     }),
 };
