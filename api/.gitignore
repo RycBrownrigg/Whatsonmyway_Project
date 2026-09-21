@@ -1,0 +1,4 @@
+# Generated pack build output (Phase 1, ADMINBUILD-01) — never enter version control.
+# No trailing slash: matches whether or not the directory exists yet on disk,
+# which `git check-ignore` requires to resolve a directory-only pattern.
+packfiles

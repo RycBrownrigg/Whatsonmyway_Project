@@ -5,12 +5,18 @@
 export class AppError extends Error {
   statusCode: number;
   code: string;
+  // Optional structured payload a route can surface alongside `{ error, message }`
+  // — e.g. packBuild.ts's MissingFieldReport[] for MISSING_REQUIRED_FIELDS.
+  // Undefined for every error that doesn't need one; existing call sites are
+  // unaffected.
+  details?: unknown;
 
-  constructor(statusCode: number, code: string, message: string) {
+  constructor(statusCode: number, code: string, message: string, details?: unknown) {
     super(message);
     this.name = 'AppError';
     this.statusCode = statusCode;
     this.code = code;
+    this.details = details;
   }
 }
 
