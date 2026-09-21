@@ -450,4 +450,104 @@ describe('admin pois review/correction loop (ADMINPOI-02)', () => {
     expect(response.statusCode).toBe(404);
     expect(response.json().error).toBe('POI_NOT_FOUND');
   });
+
+  it('selectedCandidateIndex writes that candidate\'s exact latitude/longitude, sets geocode_status ok and status active, clears geocode_candidates, and makes zero provider calls', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    const fetchSpy = mockSmarty([
+      smartyCandidate({ latitude: 40.1, longitude: -90.1 }),
+      smartyCandidate({ latitude: 40.2, longitude: -90.2 }),
+    ]);
+    const created = await createPoi(app, poiType.id);
+    expect(created.geocodeStatus).toBe('low_confidence');
+    expect(Array.isArray(created.geocodeCandidates)).toBe(true);
+    expect(created.geocodeCandidates.length).toBe(2);
+
+    fetchSpy.mockClear();
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+      payload: { selectedCandidateIndex: 1 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(fetchSpy).toHaveBeenCalledTimes(0);
+
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.latitude).toBe(40.2);
+    expect(row.longitude).toBe(-90.2);
+    expect(row.geocodeStatus).toBe('ok');
+    expect(row.status).toBe('active');
+    expect(row.geocodeCandidates).toBeNull();
+  });
+
+  it('an out-of-range selectedCandidateIndex returns 400 CANDIDATE_INDEX_OUT_OF_RANGE and leaves the stored row unchanged', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([
+      smartyCandidate({ latitude: 40.1, longitude: -90.1 }),
+      smartyCandidate({ latitude: 40.2, longitude: -90.2 }),
+    ]);
+    const created = await createPoi(app, poiType.id);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+      payload: { selectedCandidateIndex: 5 },
+    });
+
+    expect(response.statusCode).toBe(400);
+    expect(response.json().error).toBe('CANDIDATE_INDEX_OUT_OF_RANGE');
+
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.geocodeStatus).toBe('low_confidence');
+    expect(row.latitude).toBeNull();
+    expect(row.longitude).toBeNull();
+    expect(Array.isArray(row.geocodeCandidates)).toBe(true);
+  });
+
+  it('posting a selectedCandidateIndex to a POI with no stored candidates returns 409 NO_CANDIDATES_STORED', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    mockSmarty([smartyCandidate({ dpvMatchCode: 'Y', precision: 'Zip9' })]);
+    const created = await createPoi(app, poiType.id);
+    expect(created.geocodeStatus).toBe('ok');
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+      payload: { selectedCandidateIndex: 0 },
+    });
+
+    expect(response.statusCode).toBe(409);
+    expect(response.json().error).toBe('NO_CANDIDATES_STORED');
+  });
+
+  it('resolves the final candidate correctly out of a ten-candidate list', async () => {
+    const app = buildTestApp();
+    const poiType = await createPoiType(app);
+    const tenCandidates = Array.from({ length: 10 }, (_, i) =>
+      smartyCandidate({ latitude: 40 + i, longitude: -90 - i }),
+    );
+    mockSmarty(tenCandidates);
+    const created = await createPoi(app, poiType.id);
+    expect(created.geocodeCandidates.length).toBe(10);
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/v1/admin/pois/${created.id}/geocode`,
+      headers: authHeaders(),
+      payload: { selectedCandidateIndex: 9 },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const [row] = await testDb.select().from(pois).where(eq(pois.id, created.id));
+    expect(row.latitude).toBe(49);
+    expect(row.longitude).toBe(-99);
+    expect(row.geocodeStatus).toBe('ok');
+    expect(row.status).toBe('active');
+  });
 });

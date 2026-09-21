@@ -106,6 +106,12 @@ export interface CreatePoiTypeInput {
 
 export type GeocodeStatus = 'pending' | 'ok' | 'low_confidence' | 'failed';
 
+export interface GeocodeCandidate {
+  address: string;
+  latitude: number;
+  longitude: number;
+}
+
 export interface Poi {
   id: string;
   poiTypeId: string;
@@ -121,7 +127,7 @@ export interface Poi {
   longitude: number | null;
   geocodeStatus: GeocodeStatus;
   geocodeConfidence: number | null;
-  geocodeCandidates: Array<{ address: string; latitude: number; longitude: number }> | null;
+  geocodeCandidates: GeocodeCandidate[] | null;
   customFields: Record<string, unknown>;
   filterValues: Record<string, unknown>;
   status: 'active' | 'flagged' | 'archived';

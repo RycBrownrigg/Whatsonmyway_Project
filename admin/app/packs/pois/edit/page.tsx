@@ -1,6 +1,6 @@
 'use client';
 
-import { Suspense, useMemo } from 'react';
+import { Suspense, useMemo, useState } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { useForm } from 'react-hook-form';
 import { zodResolver } from '@hookform/resolvers/zod';
@@ -10,6 +10,7 @@ import { toast } from 'sonner';
 import { Button } from '@/components/ui/button';
 import { Skeleton } from '@/components/ui/skeleton';
 import { GeocodeStatusBadge } from '@/components/GeocodeStatusBadge';
+import { GeocodeCandidateDialog } from '@/components/GeocodeCandidateDialog';
 import { PoiDynamicFields, PoiFixedFields } from '@/components/PoiFormFields';
 import { POI_FIXED_SCHEMA, buildPoiDynamicSchema, poiErrorCopy, type PoiFormValues } from '@/lib/poiForm';
 import { ApiError, packApi, poiApi, type CreatePoiResponse } from '@/lib/api';
@@ -19,6 +20,7 @@ function EditPoiContent() {
   const searchParams = useSearchParams();
   const id = searchParams.get('id') ?? '';
   const packId = searchParams.get('packId') ?? '';
+  const [candidateDialogOpen, setCandidateDialogOpen] = useState(false);
 
   const poiQuery = useQuery({
     queryKey: ['pois', 'detail', id],
@@ -151,6 +153,8 @@ function EditPoiContent() {
   const geocodeErrorCode = updatePoi.data?.geocodeErrorCode ?? retryGeocode.data?.geocodeErrorCode ?? null;
   const geocodeStatus = poi.geocodeStatus;
   const geocodeConfidence = poi.geocodeConfidence;
+  const candidates = poi.geocodeCandidates ?? [];
+  const hasCandidates = candidates.length > 0;
 
   return (
     <div className="flex flex-1 flex-col gap-8 px-8 py-8">
@@ -161,6 +165,17 @@ function EditPoiContent() {
           <span className="text-sm text-zinc-600">{geocodeConfidence.toFixed(2)}</span>
         )}
       </div>
+
+      {hasCandidates && (
+        <div className="flex items-center justify-between rounded-md border border-amber-300 bg-amber-50 px-4 py-3">
+          <p className="text-sm text-amber-800">
+            We found more than one match for this address — pick the correct one.
+          </p>
+          <Button type="button" variant="secondary" onClick={() => setCandidateDialogOpen(true)}>
+            Choose the correct address
+          </Button>
+        </div>
+      )}
 
       <form onSubmit={form.handleSubmit(onSubmit)} className="flex flex-col gap-8">
         <PoiFixedFields form={form} />
@@ -185,6 +200,19 @@ function EditPoiContent() {
           </Button>
         </div>
       </form>
+
+      <GeocodeCandidateDialog
+        poiId={id}
+        candidates={candidates}
+        open={candidateDialogOpen}
+        onOpenChange={setCandidateDialogOpen}
+        onResolved={() => {
+          // Invalidate (rather than trust a locally-applied response) so the
+          // badge and candidate affordance re-derive from a fresh GET,
+          // matching the same pattern the save/retry paths use.
+          queryClient.invalidateQueries({ queryKey: ['pois'] });
+        }}
+      />
     </div>
   );
 }
