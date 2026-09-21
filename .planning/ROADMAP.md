@@ -54,7 +54,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A POI whose address fails to geocode or geocodes with low confidence is flagged for review and excluded from any pack build.
   4. Admin can trigger a standard pack build from the pack detail view that includes all active, successfully-geocoded POIs of that pack's POI type, and a missing required field blocks the build with a clear report of which POIs/fields are missing.
 
-**Plans**: 2/5 plans executed
+**Plans**: 3/5 plans executed
 
 Plans:
 **Wave 1**
@@ -67,7 +67,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-03-PLAN.md — Manual POI entry: Smarty geocoding adapter, POI types, geocode-on-save, POI list with status badges
+- [x] 01-03-PLAN.md — Manual POI entry: Smarty geocoding adapter, POI types, geocode-on-save, POI list with status badges
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -170,7 +170,7 @@ Phases execute in numeric order: 1 → 2 → 3 → 4 → 5 → 6
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Admin Pack Authoring & Build | 2/5 | In Progress|  |
+| 1. Admin Pack Authoring & Build | 3/5 | In Progress|  |
 | 2. Core Route Search & POI Detail | 0/TBD | Not started | - |
 | 3. Purchases & Entitlements | 0/TBD | Not started | - |
 | 4. Pack Management, Filtering & State Packs | 0/TBD | Not started | - |
