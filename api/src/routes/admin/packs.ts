@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { z } from 'zod';
 import { desc, eq } from 'drizzle-orm';
 import { db } from '../../db/client.js';
-import { packFieldDefinitions, packs } from '../../db/schema.js';
+import { packFieldDefinitions, packFilterDefinitions, packs } from '../../db/schema.js';
 
 export const CreatePackSchema = z.object({
   name: z.string().min(1),
@@ -60,6 +60,12 @@ export async function registerPackRoutes(fastify: FastifyInstance) {
       .where(eq(packFieldDefinitions.packId, id))
       .orderBy(packFieldDefinitions.sortOrder, packFieldDefinitions.fieldKey);
 
-    reply.status(200).send({ pack, fields });
+    const filters = await db
+      .select()
+      .from(packFilterDefinitions)
+      .where(eq(packFilterDefinitions.packId, id))
+      .orderBy(packFilterDefinitions.sortOrder, packFilterDefinitions.filterKey);
+
+    reply.status(200).send({ pack, fields, filters });
   });
 }

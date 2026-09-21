@@ -7,6 +7,7 @@ import { toast } from 'sonner';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FrameworkFieldRows, type FrameworkFieldRowsHandle } from '@/components/FrameworkFieldRows';
+import { FrameworkFilterRows, type FrameworkFilterRowsHandle } from '@/components/FrameworkFilterRows';
 import { ApiError, packApi } from '@/lib/api';
 
 function PackDetailContent() {
@@ -20,12 +21,16 @@ function PackDetailContent() {
   });
 
   const fieldsRef = useRef<FrameworkFieldRowsHandle>(null);
+  const filtersRef = useRef<FrameworkFilterRowsHandle>(null);
   const [isSaving, setIsSaving] = useState(false);
 
   async function handleSaveFramework() {
     setIsSaving(true);
     try {
-      await fieldsRef.current?.commitDrafts();
+      await Promise.all([
+        fieldsRef.current?.commitDrafts(),
+        filtersRef.current?.commitDrafts(),
+      ]);
       toast.success('Pack framework saved');
     } catch (err) {
       const code = err instanceof ApiError ? err.code : 'UNKNOWN_ERROR';
@@ -47,7 +52,7 @@ function PackDetailContent() {
     return <p className="px-8 py-8 text-sm text-red-600">Could not load this pack.</p>;
   }
 
-  const { pack, fields } = detailQuery.data!;
+  const { pack, fields, filters } = detailQuery.data!;
 
   return (
     <div className="flex flex-1 flex-col gap-8 px-8 py-8">
@@ -69,6 +74,18 @@ function PackDetailContent() {
         </CardHeader>
         <CardContent>
           <FrameworkFieldRows ref={fieldsRef} packId={packId} fields={fields} />
+        </CardContent>
+      </Card>
+
+      {/* Parent's flex gap-8 (32px) already separates every section; +mt-4 (16px)
+          brings Fields-to-Filters up to the 2xl (48px) major-section break
+          01-UI-SPEC.md specifies for this particular boundary. */}
+      <Card className="mt-4">
+        <CardHeader>
+          <CardTitle>Filters</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <FrameworkFilterRows ref={filtersRef} packId={packId} filters={filters} />
         </CardContent>
       </Card>
 

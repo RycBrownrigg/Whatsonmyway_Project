@@ -109,6 +109,31 @@ export interface UpdateFieldInput {
   sortOrder?: number;
 }
 
+export interface PackFilterDefinition {
+  id: string;
+  packId: string;
+  filterKey: string;
+  label: string;
+  filterType: 'boolean' | 'single-select' | 'multi-select';
+  options: string[] | null;
+  sortOrder: number;
+}
+
+export interface CreateFilterInput {
+  filterKey: string;
+  label: string;
+  filterType: 'boolean' | 'single-select' | 'multi-select';
+  options?: string[];
+  sortOrder?: number;
+}
+
+export interface UpdateFilterInput {
+  label?: string;
+  filterType?: 'boolean' | 'single-select' | 'multi-select';
+  options?: string[] | null;
+  sortOrder?: number;
+}
+
 export const packApi = {
   list: () => apiCall<Pack[]>('/v1/admin/packs'),
   create: (input: CreatePackInput) =>
@@ -117,7 +142,9 @@ export const packApi = {
       body: JSON.stringify(input),
     }),
   get: (id: string) =>
-    apiCall<{ pack: Pack; fields: PackFieldDefinition[] }>(`/v1/admin/packs/${id}`),
+    apiCall<{ pack: Pack; fields: PackFieldDefinition[]; filters: PackFilterDefinition[] }>(
+      `/v1/admin/packs/${id}`,
+    ),
   addField: (packId: string, input: CreateFieldInput) =>
     apiCall<PackFieldDefinition>(`/v1/admin/packs/${packId}/framework/fields`, {
       method: 'POST',
@@ -132,6 +159,22 @@ export const packApi = {
     }),
   removeField: (packId: string, fieldId: string) =>
     apiCall<void>(`/v1/admin/packs/${packId}/framework/fields/${fieldId}`, {
+      method: 'DELETE',
+    }),
+  listFilters: (packId: string) =>
+    apiCall<PackFilterDefinition[]>(`/v1/admin/packs/${packId}/framework/filters`),
+  addFilter: (packId: string, input: CreateFilterInput) =>
+    apiCall<PackFilterDefinition>(`/v1/admin/packs/${packId}/framework/filters`, {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  updateFilter: (packId: string, filterId: string, input: UpdateFilterInput) =>
+    apiCall<PackFilterDefinition>(`/v1/admin/packs/${packId}/framework/filters/${filterId}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  removeFilter: (packId: string, filterId: string) =>
+    apiCall<void>(`/v1/admin/packs/${packId}/framework/filters/${filterId}`, {
       method: 'DELETE',
     }),
 };
