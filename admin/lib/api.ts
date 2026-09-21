@@ -4,12 +4,17 @@ const TOKEN_STORAGE_KEY = 'wowm.adminToken';
 export class ApiError extends Error {
   status: number;
   code: string;
+  // Present only for POST /v1/admin/packs/:id/build's 422
+  // MISSING_REQUIRED_FIELDS response (D-04) — the full per-POI/per-field
+  // report the build-failure table renders. Undefined for every other error.
+  report?: MissingFieldReportEntry[];
 
-  constructor(status: number, code: string, message: string) {
+  constructor(status: number, code: string, message: string, report?: MissingFieldReportEntry[]) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.report = report;
   }
 }
 
@@ -44,7 +49,12 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
 
   if (!response.ok) {
     const body = await response.json().catch(() => ({}));
-    throw new ApiError(response.status, body.error ?? 'UNKNOWN_ERROR', body.error ?? 'API request failed');
+    throw new ApiError(
+      response.status,
+      body.error ?? 'UNKNOWN_ERROR',
+      body.error ?? 'API request failed',
+      body.report,
+    );
   }
 
   if (response.status === 204) {
@@ -208,6 +218,19 @@ export interface UpdateFilterInput {
   sortOrder?: number;
 }
 
+export interface MissingFieldReportEntry {
+  poiId: string;
+  poiName: string;
+  missingFieldKeys: string[];
+}
+
+export interface PackBuildResult {
+  version: number;
+  poiCount: number;
+  checksum: string;
+  fileUrl: string;
+}
+
 export const packApi = {
   list: () => apiCall<Pack[]>('/v1/admin/packs'),
   create: (input: CreatePackInput) =>
@@ -250,6 +273,10 @@ export const packApi = {
   removeFilter: (packId: string, filterId: string) =>
     apiCall<void>(`/v1/admin/packs/${packId}/framework/filters/${filterId}`, {
       method: 'DELETE',
+    }),
+  build: (packId: string) =>
+    apiCall<PackBuildResult>(`/v1/admin/packs/${packId}/build`, {
+      method: 'POST',
     }),
 };
 

@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { FrameworkFieldRows, type FrameworkFieldRowsHandle } from '@/components/FrameworkFieldRows';
 import { FrameworkFilterRows, type FrameworkFilterRowsHandle } from '@/components/FrameworkFilterRows';
+import { PackBuildPanel } from '@/components/PackBuildPanel';
 import { ApiError, packApi } from '@/lib/api';
 
 function PackDetailContent() {
@@ -104,6 +105,13 @@ function PackDetailContent() {
         >
           Save Pack Framework
         </Button>
+      </div>
+
+      {/* Parent's flex gap-8 (32px) plus +mt-4 (16px) reaches the 2xl (48px)
+          major-section break 01-UI-SPEC.md specifies between pack detail
+          sub-sections — same pattern as the Fields-to-Filters boundary above. */}
+      <div className="mt-4">
+        <PackBuildPanel packId={packId} currentVersion={pack.currentVersion} />
       </div>
     </div>
   );
