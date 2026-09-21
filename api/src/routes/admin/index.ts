@@ -5,6 +5,7 @@ import { registerFieldRoutes } from './fields.js';
 import { registerFilterRoutes } from './filters.js';
 import { registerPoiTypeRoutes } from './poiTypes.js';
 import { registerPoiRoutes } from './pois.js';
+import { registerBuildRoutes } from './build.js';
 
 export async function registerAdminRoutes(fastify: FastifyInstance) {
   fastify.addHook('preHandler', adminAuthPreHandler);
@@ -13,4 +14,5 @@ export async function registerAdminRoutes(fastify: FastifyInstance) {
   await fastify.register(registerFilterRoutes);
   await fastify.register(registerPoiTypeRoutes);
   await fastify.register(registerPoiRoutes);
+  await fastify.register(registerBuildRoutes);
 }
