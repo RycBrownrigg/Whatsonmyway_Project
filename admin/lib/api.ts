@@ -101,6 +101,14 @@ export interface CreateFieldInput {
   sortOrder?: number;
 }
 
+export interface UpdateFieldInput {
+  label?: string;
+  dataType?: 'text' | 'number' | 'boolean' | 'url' | 'phone' | 'enum';
+  enumOptions?: string[] | null;
+  isRequired?: boolean;
+  sortOrder?: number;
+}
+
 export const packApi = {
   list: () => apiCall<Pack[]>('/v1/admin/packs'),
   create: (input: CreatePackInput) =>
@@ -114,5 +122,16 @@ export const packApi = {
     apiCall<PackFieldDefinition>(`/v1/admin/packs/${packId}/framework/fields`, {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+  listFields: (packId: string) =>
+    apiCall<PackFieldDefinition[]>(`/v1/admin/packs/${packId}/framework/fields`),
+  updateField: (packId: string, fieldId: string, input: UpdateFieldInput) =>
+    apiCall<PackFieldDefinition>(`/v1/admin/packs/${packId}/framework/fields/${fieldId}`, {
+      method: 'PUT',
+      body: JSON.stringify(input),
+    }),
+  removeField: (packId: string, fieldId: string) =>
+    apiCall<void>(`/v1/admin/packs/${packId}/framework/fields/${fieldId}`, {
+      method: 'DELETE',
     }),
 };
