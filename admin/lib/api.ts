@@ -92,6 +92,61 @@ export interface CreatePackInput {
   priceTier?: string;
 }
 
+export interface PoiType {
+  id: string;
+  slug: string;
+  name: string;
+  createdAt: string;
+}
+
+export interface CreatePoiTypeInput {
+  slug: string;
+  name: string;
+}
+
+export type GeocodeStatus = 'pending' | 'ok' | 'low_confidence' | 'failed';
+
+export interface Poi {
+  id: string;
+  poiTypeId: string;
+  name: string;
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressZip: string;
+  phone: string | null;
+  website: string | null;
+  additionalInfo: string | null;
+  latitude: number | null;
+  longitude: number | null;
+  geocodeStatus: GeocodeStatus;
+  geocodeConfidence: number | null;
+  geocodeCandidates: Array<{ address: string; latitude: number; longitude: number }> | null;
+  customFields: Record<string, unknown>;
+  filterValues: Record<string, unknown>;
+  status: 'active' | 'flagged' | 'archived';
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface CreatePoiInput {
+  poiTypeId: string;
+  name: string;
+  addressStreet: string;
+  addressCity: string;
+  addressState: string;
+  addressZip: string;
+  phone?: string;
+  website?: string;
+  additionalInfo?: string;
+  customFields?: Record<string, unknown>;
+  filterValues?: Record<string, unknown>;
+}
+
+export interface CreatePoiResponse extends Poi {
+  geocodeErrorCode: string | null;
+}
+
 export interface CreateFieldInput {
   fieldKey: string;
   label: string;
@@ -176,5 +231,29 @@ export const packApi = {
   removeFilter: (packId: string, filterId: string) =>
     apiCall<void>(`/v1/admin/packs/${packId}/framework/filters/${filterId}`, {
       method: 'DELETE',
+    }),
+};
+
+export const poiTypeApi = {
+  list: () => apiCall<PoiType[]>('/v1/admin/poi-types'),
+  create: (input: CreatePoiTypeInput) =>
+    apiCall<PoiType>('/v1/admin/poi-types', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+};
+
+export const poiApi = {
+  list: (params: { poiTypeId?: string; status?: Poi['status'] }) => {
+    const query = new URLSearchParams();
+    if (params.poiTypeId) query.set('poiTypeId', params.poiTypeId);
+    if (params.status) query.set('status', params.status);
+    const qs = query.toString();
+    return apiCall<Poi[]>(`/v1/admin/pois${qs ? `?${qs}` : ''}`);
+  },
+  create: (input: CreatePoiInput) =>
+    apiCall<CreatePoiResponse>('/v1/admin/pois', {
+      method: 'POST',
+      body: JSON.stringify(input),
     }),
 };

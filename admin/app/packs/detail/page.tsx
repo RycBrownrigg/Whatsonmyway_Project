@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useRef, useState } from 'react';
+import Link from 'next/link';
 import { useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import { toast } from 'sonner';
@@ -67,6 +68,12 @@ function PackDetailContent() {
           <span>Apple Product ID: {pack.appleProductId}</span>
         </CardContent>
       </Card>
+
+      <div>
+        <Link href={`/packs/pois?packId=${pack.id}`} className="text-blue-600 hover:underline">
+          POIs
+        </Link>
+      </div>
 
       <Card>
         <CardHeader>
