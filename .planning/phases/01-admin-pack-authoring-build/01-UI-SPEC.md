@@ -26,7 +26,7 @@ sensible, spec-consistent default rather than left blank, and is called out for 
 | Property | Value |
 |----------|-------|
 | Tool | shadcn — mandated by `Product Specification.md` §2 ("Web Interface" stack: Next.js + shadcn/ui + Tailwind CSS), not optional/discretionary |
-| Preset | **Not yet initialized.** `admin/` itself doesn't exist yet (scaffolds during Phase 1 execution per `01-CONTEXT.md` → Claude's Discretion). The shadcn init gate cannot run against a project that isn't scaffolded. Executor must run `create-next-app` first, then `npx shadcn init` with: style `new-york` (denser layout — better fit for the data/table-heavy admin screens in this phase than `default`), base color `neutral`, CSS variables **on**, RSC **on**. Generate the equivalent preset string at ui.shadcn.com/create with those answers if the CLI prompts for one. |
+| Preset | **Initialized during 01-01 execution.** The `shadcn` CLI installed at execution time (v4.21.0) replaced the old `style: new-york / default` + `baseColor` init grammar with named presets (`nova, vega, maia, lyra, mira, luma, sera, rhea`) plus a `base` component-library choice (`base`/`radix`/`aria`) — there is no `new-york` preset in this CLI generation. Per this file's own instruction to "generate the equivalent preset string... if the CLI prompts for one," the executor built a custom preset code matching this row's original intent: `baseColor: neutral` (unchanged — still a valid option), `style: nova` (the CLI's own default style, chosen since no named style maps to "new-york"), `radius: small` (denser corners, preserving the "denser layout for data-heavy admin screens" rationale), `font: geist`, `iconLibrary: lucide`, `base: radix` (matches the Component library row below). Preset code: `b2hE` (decode: `npx shadcn@latest preset decode b2hE`; browse: `https://ui.shadcn.com/create?preset=b2hE`). CSS variables and RSC are no longer separate init flags in this CLI — both are on by default for a Next.js App Router project and are confirmed by the `components.json` provenance below. |
 | Component library | Radix UI primitives (via shadcn) |
 | Icon library | lucide-react (shadcn default) |
 | Font | Geist Sans via `next/font/google` — the `create-next-app` default since Next.js 14+; no reason to override for an internal single-admin tool |
@@ -38,13 +38,33 @@ palette to maintain for zero users who've asked for it. Revisit only if that cha
 
 ## Component Inventory
 
-Could not enumerate: `admin/` has not been scaffolded and shadcn has not been initialized — there
-is no installed `components.json` or package to run `npx shadcn info` against yet. **The executor
-must run `npx shadcn info` (or `npx shadcn view <component>` per-component) immediately after
-`npx shadcn init` during Phase 1 execution and update this table with a real provenance line
-before relying on it as verified.** Until then, treat the table below as a non-exhaustive,
-unverified recommendation only — never a closed allowlist. Add any shadcn component this phase
-needs beyond this list; that is the expected path, not an exception.
+**Provenance — real `npx shadcn@latest info` output, captured 2026-09-20 during 01-01 execution:**
+
+```
+Configuration
+  style        radix-nova
+  base         radix
+  rsc          Yes
+  typescript   Yes
+  iconLibrary  lucide
+  rtl          No
+
+Preset
+  code         b2hE
+  style        nova
+  baseColor    neutral
+  theme        neutral
+  font         geist
+  radius       small
+
+Installed Components (this task)
+  button, input, label, card, table, sonner, select, checkbox, skeleton
+```
+
+`select`, `checkbox`, and `skeleton` were added beyond this table's original list because the
+pack detail (data type dropdown, "Required" checkbox) and pack list (loading state) screens in
+01-01's own `<action>` block require them — this table was a non-exhaustive recommendation, not a
+closed allowlist, and the gap is expected/allowed per this section's original instruction.
 
 | Component | Import path | Notes |
 |-----------|-------------|-------|
