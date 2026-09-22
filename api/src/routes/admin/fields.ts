@@ -52,7 +52,7 @@ export const UpdateFieldSchema = z
     sortOrder: z.number().int().optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.dataType === 'enum' && data.enumOptions !== undefined) {
+    if (data.dataType === 'enum') {
       if (!data.enumOptions || data.enumOptions.length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,
@@ -60,12 +60,7 @@ export const UpdateFieldSchema = z
           path: ['enumOptions'],
         });
       }
-    } else if (
-      data.dataType &&
-      data.dataType !== 'enum' &&
-      data.enumOptions != null &&
-      data.enumOptions.length > 0
-    ) {
+    } else if (data.dataType && data.enumOptions != null && data.enumOptions.length > 0) {
       ctx.addIssue({
         code: z.ZodIssueCode.custom,
         message: 'enumOptions is only valid when dataType is enum',

@@ -51,7 +51,7 @@ export const UpdateFilterSchema = z
   })
   .superRefine((data, ctx) => {
     const needsOptions = data.filterType === 'single-select' || data.filterType === 'multi-select';
-    if (needsOptions && data.options !== undefined) {
+    if (needsOptions) {
       if (!data.options || data.options.length === 0) {
         ctx.addIssue({
           code: z.ZodIssueCode.custom,

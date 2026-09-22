@@ -22,6 +22,12 @@ import {
 } from '../db/schema.js';
 import { AppError } from '../utils/errors.js';
 
+const POSTGRES_UNIQUE_VIOLATION = '23505';
+
+function isPostgresError(err: unknown, code: string): boolean {
+  return typeof err === 'object' && err !== null && 'code' in err && (err as { code?: unknown }).code === code;
+}
+
 const gzip = promisify(gzipCallback);
 
 export interface MissingFieldReport {
@@ -242,20 +248,36 @@ export async function buildStandardPack(packId: string): Promise<PackBuildResult
 
   const fileUrl = `/v1/packs/${pack.slug}/download?version=${nextVersion}`;
 
-  await db.transaction(async (tx) => {
-    await tx.delete(packPois).where(eq(packPois.packId, packId));
-    await tx.insert(packPois).values(eligiblePois.map((p) => ({ packId, poiId: p.id })));
-    await tx.insert(packVersions).values({
-      packId,
-      version: nextVersion,
-      formatVersion: 1,
-      fileUrl,
-      checksum,
-      poiCount: eligiblePois.length,
+  try {
+    await db.transaction(async (tx) => {
+      await tx.delete(packPois).where(eq(packPois.packId, packId));
+      await tx.insert(packPois).values(eligiblePois.map((p) => ({ packId, poiId: p.id })));
+      await tx.insert(packVersions).values({
+        packId,
+        version: nextVersion,
+        formatVersion: 1,
+        fileUrl,
+        checksum,
+        poiCount: eligiblePois.length,
+      });
+      // A build never publishes (UC-14 step 6) — packs.status is untouched.
+      await tx.update(packs).set({ currentVersion: nextVersion }).where(eq(packs.id, packId));
     });
-    // A build never publishes (UC-14 step 6) — packs.status is untouched.
-    await tx.update(packs).set({ currentVersion: nextVersion }).where(eq(packs.id, packId));
-  });
+  } catch (err) {
+    // TOCTOU: the nextVersion SELECT above runs before this transaction, so two
+    // concurrent builds for the same pack can both compute the same nextVersion
+    // and race on pack_versions' unique(packId, version) constraint. Remap the
+    // loser's raw Postgres violation to a clear, retryable error instead of an
+    // unmapped 500.
+    if (isPostgresError(err, POSTGRES_UNIQUE_VIOLATION)) {
+      throw new AppError(
+        409,
+        'BUILD_IN_PROGRESS',
+        'Another build for this pack is already in progress. Try again in a moment.',
+      );
+    }
+    throw err;
+  }
 
   return { version: nextVersion, poiCount: eligiblePois.length, checksum, fileUrl };
 }

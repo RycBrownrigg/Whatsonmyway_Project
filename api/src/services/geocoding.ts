@@ -264,7 +264,15 @@ async function performGeocode(input: AddressInput): Promise<GeocodeResult> {
 
   const [only] = candidates;
   const confidence = scoreCandidate(only);
-  const threshold = Number(process.env.GEOCODE_CONFIDENCE_THRESHOLD ?? '0.7');
+  const rawThreshold = process.env.GEOCODE_CONFIDENCE_THRESHOLD ?? '0.7';
+  const threshold = Number(rawThreshold);
+  if (!Number.isFinite(threshold)) {
+    throw new AppError(
+      500,
+      'GEOCODING_CONFIG_MISSING',
+      `GEOCODE_CONFIDENCE_THRESHOLD is not a number: "${rawThreshold}"`,
+    );
+  }
 
   if (confidence === 0) {
     return {

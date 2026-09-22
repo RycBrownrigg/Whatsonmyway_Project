@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { toast } from 'sonner';
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { poiApi, type GeocodeCandidate } from '@/lib/api';
@@ -43,6 +44,8 @@ export function GeocodeCandidateDialog({
       setSelectedIndex(null);
       onOpenChange(false);
       onResolved();
+    } catch (err) {
+      toast.error(err instanceof Error ? err.message : 'Failed to select candidate — try again.');
     } finally {
       setIsSubmitting(false);
     }

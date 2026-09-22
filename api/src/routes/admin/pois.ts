@@ -71,31 +71,121 @@ function addressKeyFromRow(row: PoiAddress): string {
   });
 }
 
+type FieldDef = { dataType: string; enumOptions: unknown };
+type FilterDef = { filterType: string; options: unknown };
+
 // T-01-14 (threat model): customFields/filterValues object keys are bounded
 // upstream by the fieldKey/filterKey regex (plan 01-02), but this route goes
 // further and rejects any submitted key that isn't a saved field/filter
 // definition for a pack built on this POI type — a key that's merely
 // regex-legal but not one the admin actually defined is still rejected.
+// Also returns each definition's dataType/filterType (+ enumOptions/options)
+// so callers can validate submitted *values*, not just keys (WR-03).
 async function findAllowedKeys(poiTypeId: string) {
   const relatedPacks = await db.select({ id: packs.id }).from(packs).where(eq(packs.poiTypeId, poiTypeId));
   if (relatedPacks.length === 0) {
-    return { fieldKeys: new Set<string>(), filterKeys: new Set<string>() };
+    return {
+      fieldKeys: new Set<string>(),
+      filterKeys: new Set<string>(),
+      fieldDefs: new Map<string, FieldDef>(),
+      filterDefs: new Map<string, FilterDef>(),
+    };
   }
   const packIds = relatedPacks.map((p) => p.id);
 
   const fieldRows = await db
-    .select({ fieldKey: packFieldDefinitions.fieldKey })
+    .select({
+      fieldKey: packFieldDefinitions.fieldKey,
+      dataType: packFieldDefinitions.dataType,
+      enumOptions: packFieldDefinitions.enumOptions,
+    })
     .from(packFieldDefinitions)
     .where(inArray(packFieldDefinitions.packId, packIds));
   const filterRows = await db
-    .select({ filterKey: packFilterDefinitions.filterKey })
+    .select({
+      filterKey: packFilterDefinitions.filterKey,
+      filterType: packFilterDefinitions.filterType,
+      options: packFilterDefinitions.options,
+    })
     .from(packFilterDefinitions)
     .where(inArray(packFilterDefinitions.packId, packIds));
 
   return {
     fieldKeys: new Set(fieldRows.map((r) => r.fieldKey)),
     filterKeys: new Set(filterRows.map((r) => r.filterKey)),
+    fieldDefs: new Map(fieldRows.map((r) => [r.fieldKey, { dataType: r.dataType, enumOptions: r.enumOptions }])),
+    filterDefs: new Map(filterRows.map((r) => [r.filterKey, { filterType: r.filterType, options: r.options }])),
   };
+}
+
+// WR-03: findAllowedKeys only bounded *keys* — a key matching a real
+// definition could still carry a value of the wrong shape (a string where
+// the field is `number`, an option not in an enum's declared list, etc.).
+// packBuild.ts copies customFields/filterValues straight into the shipped
+// pack file with no further check, so this is the last gate before that.
+function validateFieldFilterValues(
+  customFields: Record<string, unknown>,
+  filterValues: Record<string, unknown>,
+  fieldDefs: Map<string, FieldDef>,
+  filterDefs: Map<string, FilterDef>,
+): string[] {
+  const errors: string[] = [];
+
+  for (const [key, value] of Object.entries(customFields)) {
+    const def = fieldDefs.get(key);
+    if (!def) continue; // unknown-key check already rejected this elsewhere
+    switch (def.dataType) {
+      case 'number':
+        if (typeof value !== 'number') errors.push(`${key}: expected a number`);
+        break;
+      case 'boolean':
+        if (typeof value !== 'boolean') errors.push(`${key}: expected a boolean`);
+        break;
+      case 'url':
+        if (typeof value !== 'string' || !z.string().url().safeParse(value).success) {
+          errors.push(`${key}: expected a valid URL`);
+        }
+        break;
+      case 'enum': {
+        const options = Array.isArray(def.enumOptions) ? (def.enumOptions as unknown[]) : [];
+        if (typeof value !== 'string' || !options.includes(value)) {
+          errors.push(`${key}: expected one of the field's declared enumOptions`);
+        }
+        break;
+      }
+      case 'text':
+      case 'phone':
+      default:
+        if (typeof value !== 'string') errors.push(`${key}: expected a string`);
+        break;
+    }
+  }
+
+  for (const [key, value] of Object.entries(filterValues)) {
+    const def = filterDefs.get(key);
+    if (!def) continue;
+    switch (def.filterType) {
+      case 'boolean':
+        if (typeof value !== 'boolean') errors.push(`${key}: expected a boolean`);
+        break;
+      case 'single-select': {
+        const options = Array.isArray(def.options) ? (def.options as unknown[]) : [];
+        if (typeof value !== 'string' || !options.includes(value)) {
+          errors.push(`${key}: expected one of the filter's declared options`);
+        }
+        break;
+      }
+      case 'multi-select': {
+        const options = Array.isArray(def.options) ? (def.options as unknown[]) : [];
+        if (!Array.isArray(value) || !value.every((v) => typeof v === 'string' && options.includes(v))) {
+          errors.push(`${key}: expected an array of the filter's declared options`);
+        }
+        break;
+      }
+    }
+  }
+
+  return errors;
 }
 
 export async function registerPoiRoutes(fastify: FastifyInstance) {
@@ -114,7 +204,7 @@ export async function registerPoiRoutes(fastify: FastifyInstance) {
       return;
     }
 
-    const { fieldKeys, filterKeys } = await findAllowedKeys(poiTypeId);
+    const { fieldKeys, filterKeys, fieldDefs, filterDefs } = await findAllowedKeys(poiTypeId);
     const unknownFieldKeys = Object.keys(customFields).filter((k) => !fieldKeys.has(k));
     const unknownFilterKeys = Object.keys(filterValues).filter((k) => !filterKeys.has(k));
     if (unknownFieldKeys.length > 0 || unknownFilterKeys.length > 0) {
@@ -123,6 +213,12 @@ export async function registerPoiRoutes(fastify: FastifyInstance) {
         unknownFieldKeys,
         unknownFilterKeys,
       });
+      return;
+    }
+
+    const valueErrors = validateFieldFilterValues(customFields, filterValues, fieldDefs, filterDefs);
+    if (valueErrors.length > 0) {
+      reply.status(400).send({ error: 'INVALID_FIELD_VALUE_TYPE', issues: valueErrors });
       return;
     }
 
@@ -219,7 +315,7 @@ export async function registerPoiRoutes(fastify: FastifyInstance) {
     // customFields/filterValues key must match a saved field/filter
     // definition for a pack built on this POI's type.
     if (patch.customFields || patch.filterValues) {
-      const { fieldKeys, filterKeys } = await findAllowedKeys(existing.poiTypeId);
+      const { fieldKeys, filterKeys, fieldDefs, filterDefs } = await findAllowedKeys(existing.poiTypeId);
       const unknownFieldKeys = Object.keys(patch.customFields ?? {}).filter((k) => !fieldKeys.has(k));
       const unknownFilterKeys = Object.keys(patch.filterValues ?? {}).filter((k) => !filterKeys.has(k));
       if (unknownFieldKeys.length > 0 || unknownFilterKeys.length > 0) {
@@ -228,6 +324,17 @@ export async function registerPoiRoutes(fastify: FastifyInstance) {
           unknownFieldKeys,
           unknownFilterKeys,
         });
+        return;
+      }
+
+      const valueErrors = validateFieldFilterValues(
+        patch.customFields ?? {},
+        patch.filterValues ?? {},
+        fieldDefs,
+        filterDefs,
+      );
+      if (valueErrors.length > 0) {
+        reply.status(400).send({ error: 'INVALID_FIELD_VALUE_TYPE', issues: valueErrors });
         return;
       }
     }

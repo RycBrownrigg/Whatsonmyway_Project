@@ -41,7 +41,7 @@ export function buildPoiDynamicSchema(fields: PackFieldDefinition[]) {
   for (const field of fields) {
     if (field.dataType === 'boolean') {
       shape[field.fieldKey] = field.isRequired
-        ? z.literal(true, { message: `${field.label} is required.` })
+        ? z.boolean({ required_error: `${field.label} is required.` })
         : z.boolean().optional();
       continue;
     }
