@@ -8,7 +8,7 @@ export function buildApp() {
 
   app.register(cors, {
     origin: process.env.ADMIN_ORIGIN ?? 'http://localhost:3000',
-    methods: ['GET', 'POST', 'PUT', 'OPTIONS'],
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 

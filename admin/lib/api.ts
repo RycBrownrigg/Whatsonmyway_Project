@@ -37,7 +37,7 @@ export async function apiCall<T>(endpoint: string, options: RequestInit = {}): P
   const token = getAdminToken();
 
   const headers: HeadersInit = {
-    'Content-Type': 'application/json',
+    ...(options.body ? { 'Content-Type': 'application/json' } : {}),
     ...(token ? { Authorization: `Bearer ${token}` } : {}),
     ...options.headers,
   };
