@@ -44,6 +44,7 @@ Decimal phases appear between their surrounding integers in numeric order.
 ### Phase 1: Admin Pack Authoring & Build
 
 **Goal**: Admin can go from an empty catalog to a build-ready standard pack using only manually-entered data — no import pipeline required yet.
+**User Story:** As an admin, I want to define a pack's framework and manually add geocoded POIs, so that I can build a downloadable standard pack without an import pipeline.
 **Mode:** mvp
 **Depends on**: Nothing (first phase)
 **Requirements**: ADMINFW-01, ADMINFW-02, ADMINPOI-01, ADMINPOI-02, ADMINBUILD-01
@@ -54,7 +55,7 @@ Decimal phases appear between their surrounding integers in numeric order.
   3. A POI whose address fails to geocode or geocodes with low confidence is flagged for review and excluded from any pack build.
   4. Admin can trigger a standard pack build from the pack detail view that includes all active, successfully-geocoded POIs of that pack's POI type, and a missing required field blocks the build with a clear report of which POIs/fields are missing.
 
-**Plans**: 4/5 plans executed
+**Plans**: 5/5 plans executed
 
 Plans:
 **Wave 1**
@@ -75,7 +76,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
-- [ ] 01-05-PLAN.md — Standard pack build: required-field validation, `pack_pois` snapshot, checksummed pack file, versioned release
+- [x] 01-05-PLAN.md — Standard pack build: required-field validation, `pack_pois` snapshot, checksummed pack file, versioned release
 
 **UI hint**: yes
 

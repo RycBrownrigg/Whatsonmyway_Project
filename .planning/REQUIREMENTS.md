@@ -56,13 +56,13 @@ Derived directly from `Product Specification.md` §8 (Use Cases) and §9 (Test C
 
 ### Admin — Pack Framework
 
-- [ ] **ADMINFW-01**: Admin can define a pack's fields (key, label, data type, required flag) (UC-11)
-- [ ] **ADMINFW-02**: Admin can define a pack's filters (key, label, type, options) (UC-11)
+- [x] **ADMINFW-01**: Admin can define a pack's fields (key, label, data type, required flag) (UC-11)
+- [x] **ADMINFW-02**: Admin can define a pack's filters (key, label, type, options) (UC-11)
 
 ### Admin — POI Management
 
-- [ ] **ADMINPOI-01**: Admin can add a POI manually; the address is geocoded via Smarty and stored with status/confidence (UC-12)
-- [ ] **ADMINPOI-02**: A failed or low-confidence geocode flags the POI for review and excludes it from pack builds until resolved (UC-12)
+- [x] **ADMINPOI-01**: Admin can add a POI manually; the address is geocoded via Smarty and stored with status/confidence (UC-12)
+- [x] **ADMINPOI-02**: A failed or low-confidence geocode flags the POI for review and excludes it from pack builds until resolved (UC-12)
 
 ### Admin — Import Pipeline
 
@@ -75,7 +75,7 @@ Derived directly from `Product Specification.md` §8 (Use Cases) and §9 (Test C
 
 ### Admin — Pack Building
 
-- [ ] **ADMINBUILD-01**: Admin can build/rebuild a standard pack from all active, successfully-geocoded master POIs of its POI type; a missing required field fails the build and reports which POIs/fields are missing (UC-14, TC-27, TC-28)
+- [x] **ADMINBUILD-01**: Admin can build/rebuild a standard pack from all active, successfully-geocoded master POIs of its POI type; a missing required field fails the build and reports which POIs/fields are missing (UC-14, TC-27, TC-28)
 - [ ] **ADMINBUILD-02**: Admin can build/rebuild a state pack from all active, successfully-geocoded master POIs in that state across all POI types, preserving each POI's pack-of-origin filters/fields (UC-15, TC-29)
 
 ### Admin — Feedback Triage
@@ -100,11 +100,11 @@ None currently deferred — the whole spec is in scope for this project (see Key
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| ADMINFW-01 | Phase 1 | Pending |
-| ADMINFW-02 | Phase 1 | Pending |
-| ADMINPOI-01 | Phase 1 | Pending |
-| ADMINPOI-02 | Phase 1 | Pending |
-| ADMINBUILD-01 | Phase 1 | Pending |
+| ADMINFW-01 | Phase 1 | Complete |
+| ADMINFW-02 | Phase 1 | Complete |
+| ADMINPOI-01 | Phase 1 | Complete |
+| ADMINPOI-02 | Phase 1 | Complete |
+| ADMINBUILD-01 | Phase 1 | Complete |
 | ROUTE-01 | Phase 2 | Pending |
 | ROUTE-02 | Phase 2 | Pending |
 | ROUTE-03 | Phase 2 | Pending |
